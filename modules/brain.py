@@ -1,32 +1,37 @@
 import os
 import json
-from google import genai
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
 def _get_client():
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is not set. Create a .env file or set the environment variable before running.")
-    return genai.Client(api_key=api_key)
+        raise RuntimeError("GROQ_API_KEY is not set. Create a .env file or set the environment variable before running.")
+    return OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1"
+    )
 
 class ContentBrain:
     def get_trending_topic(self):
         """
-        In a full build, this would scrape Google Trends or Twitter.
-        For now, we ask Gemini to pick a viral niche topic.
+        Asks Groq to pick a viral niche topic.
         """
         prompts = "Give me 1 specific, viral, and engaging topic for a Short Documentary. It should be a 'Engaging Did you know' fact or a 'Fun/intriguing Engaging News'. return ONLY the topic name."
         client = _get_client()
-        response = client.models.generate_content(model=os.getenv('GEMINI_MODEL', 'gemini-2.0-flash'), contents=prompts)
-        topic = response.text.strip()
+        response = client.chat.completions.create(
+            model=os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+            messages=[{"role": "user", "content": prompts}]
+        )
+        topic = response.choices[0].message.content.strip()
         print(f"🎯 Selected Topic: {topic}")
         return topic
 
     def generate_script(self, topic):
         """
-        Generates a structured JSON script with visual cues.
+        Generates a structured JSON script with visual cues using Groq.
         """
         print(f"📝 Writing script for: {topic}...")
         prompt = f"""
@@ -49,7 +54,7 @@ class ContentBrain:
       - **visual_2:** Matches the *end* of the sentence or provides a reaction/context.
     - **Strictly Literal:** If the text is "The economy crashed," do NOT search "sad man". Search "Stock market red chart".
 
-    ### OUTPUT FORMAT (Strict JSON):
+    ### OUTPUT FORMAT (Strict JSON - Return ONLY valid JSON array, no extra markdown text outside):
     [
         {{
             "id": 1,
@@ -67,49 +72,16 @@ class ContentBrain:
         }}
     ]
     """
-    #     prompt = f"""
-    # You are a master visual storyteller creating a viral YouTube Short.
-    # Topic: {topic}
-    
-    # ### CRITICAL REQUIREMENTS:
-    # 1. **Perspective:** Strictly **3rd Person** (e.g., "Scientists discovered..." or "The world changed..."). No "I" or "You".
-    # 2. **Tone:** Cinematic, high-stakes, and slightly exaggerated.
-    #    - Use **Power Words**: Instead of "big," use "colossal." Instead of "scary," use "terrifying."
-    #    - The vibe should be "Mystery Documentary" (like Vox or National Geographic but faster).
-    # 3. **Length:** Exactly **8 to 9 scenes**. Total read time 40-50 seconds.
-    # 4. **Visual Strategy:** Keywords must be optimized for Pexels Stock Footage.
-    #    - Use simple, broad nouns: "storm clouds", "ancient ruins", "laboratory microscope".
-    #    - Avoid complex actions or specific people.
-    
-    # ### STRUCTURE GUIDE:
-    # - **Scene 1 (The Hook):** A mind-blowing statement or paradox. Grab attention immediately.
-    # - **Scene 2-3 (The Mystery):** Establish why this is strange, dangerous, or important.
-    # - **Scene 4-7 (The Climax):** The "Wait, what?" moment. The biggest twist or fact.
-    # - **Scene 8-9 (The Mic Drop):** A final haunting thought or powerful conclusion.
-    
-    # ### OUTPUT FORMAT (Strict JSON):
-    # [
-    #     {{
-    #         "id": 1,
-    #         "text": "Deep beneath the Antarctic ice, something IMPOSSIBLE has just been detected.",
-    #         "keywords": "glacier aerial drone cinematic",
-    #         "mood": "ominous" 
-    #     }},
-    #     {{
-    #         "id": 2,
-    #         "text": "For centuries, maps showed this area as empty... they were wrong.",
-    #         "keywords": "old map ancient paper table",
-    #         "mood": "mystery"
-    #     }}
-    # ]
-    # """
-    
-
         client = _get_client()
-        response = client.models.generate_content(model=os.getenv('GEMINI_MODEL', 'gemini-2.0-flash'), contents=prompt)
+        response = client.chat.completions.create(
+            model=os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        raw_text = response.choices[0].message.content.strip()
         
         # Clean the response to ensure it's valid JSON (sometimes AI adds markdown)
-        clean_text = response.text.replace('```json', '').replace('```', '').strip()
+        clean_text = raw_text.replace('```json', '').replace('```', '').strip()
         
         try:
             script_data = json.loads(clean_text)
