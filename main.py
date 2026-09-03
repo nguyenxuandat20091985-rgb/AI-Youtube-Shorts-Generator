@@ -1,90 +1,78 @@
 import asyncio
-from modules.brain import ContentBrain
-from modules.asset_manager import AssetManager
-from modules.audio import AudioEngine
-from modules.composer import Composer
 import os
 import shutil
+
+from modules.asset_manager import AssetManager
+from modules.audio import AudioEngine
+from modules.brain import ContentBrain
+from modules.composer import Composer
+
+
 def clean_cache():
-    """
-    Safely deletes temporary files.
-    Includes a Safety Lock to prevent deleting anything outside the project.
-    """
-    print("🧹 Cleaning up temporary files...")
-    
-    # 1. Define the specific target folders
+    """Delete only generated temporary assets inside this project's assets directory."""
+    project_root = os.path.abspath(os.getcwd())
+    assets_root = os.path.abspath(os.path.join(project_root, "assets"))
     folders_to_clean = [
-        os.path.join(os.getcwd(), "assets", "audio_clips"),
-        os.path.join(os.getcwd(), "assets", "video_clips"),
-        os.path.join(os.getcwd(), "assets", "temp")
+        os.path.join(assets_root, "audio_clips"),
+        os.path.join(assets_root, "video_clips"),
+        os.path.join(assets_root, "temp"),
     ]
 
+    print("🧹 Cleaning temporary files...")
     for folder in folders_to_clean:
-        # SAFETY CHECK 1: Ensure folder actually exists
-        if not os.path.exists(folder):
+        folder_abs = os.path.abspath(folder)
+        if not folder_abs.startswith(assets_root + os.sep):
+            print(f"🚨 SECURITY ALERT: Refusing to clean {folder_abs}")
             continue
-            
-        # SAFETY CHECK 2: Double check we are inside our project "assets" folder
-        # This prevents the script from ever touching C:\ or System32
-        if "assets" not in folder:
-            print(f"   🚨 SECURITY ALERT: Skipping {folder} because it looks unsafe!")
+        if not os.path.isdir(folder_abs):
             continue
-
-        # Loop through files inside the folder
-        for filename in os.listdir(folder):
-            file_path = os.path.join(folder, filename)
-            
+        for name in os.listdir(folder_abs):
+            path = os.path.join(folder_abs, name)
             try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path) # Delete the file
-                    print(f"      Deleted: {filename}") # Print so you can see it working
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path) # Delete subfolders if any
-            except Exception as e:
-                print(f"   ❌ Failed to delete {file_path}. Reason: {e}")
-    
+                if os.path.islink(path) or os.path.isfile(path):
+                    os.unlink(path)
+                elif os.path.isdir(path):
+                    shutil.rmtree(path)
+            except OSError as exc:
+                print(f"⚠️ Could not delete {path}: {exc}")
     print("✨ Workspace clean!")
+
 
 async def main():
     print("🚀 STARTING AUTOMATION...")
-    
-    # 1. BRAIN: Get Script
-    brain = ContentBrain()
+
     try:
+        brain = ContentBrain()
         topic = brain.get_trending_topic()
         script = brain.generate_script(topic)
-    except Exception as e:
-        print(f"❌ Brain Error: {e}")
-        return
-    
-    if not script:
-        print("❌ Script generation failed.")
-        return
+        if not script:
+            raise RuntimeError("Script generation failed.")
 
-    # 2. AUDIO: Generate Voice
-    audio_engine = AudioEngine() 
-    try:
+        audio_engine = AudioEngine()
         script = await audio_engine.process_script(script)
-    except Exception as e:
-        print(f"❌ Audio Error: {e}")
-        return
 
-    # 3. ASSETS: Get Stock Video
-    asset_manager = AssetManager()
-    assets_map = asset_manager.get_videos(script)
+        asset_manager = AssetManager()
+        assets_map = asset_manager.get_videos(script)
+        if not assets_map:
+            raise RuntimeError("No usable stock-video assets were downloaded.")
 
-    # 4. COMPOSER: Merge Video + Audio
-    composer = Composer()
+        composer = Composer()
+        final_scene_paths = composer.render_all_scenes(script, assets_map)
+        if not final_scene_paths:
+            raise RuntimeError("No scenes could be rendered.")
 
-    final_scene_paths = composer.render_all_scenes(script, assets_map)
+        output_path = composer.concatenate_with_transitions(final_scene_paths)
+        if not output_path or not os.path.isfile(output_path):
+            raise RuntimeError("Final video was not created.")
 
-    # 5. STITCH WITH TRANSITIONS
-    if final_scene_paths:
-        # CHANGED: Now using the transition function instead of simple concat
-        composer.concatenate_with_transitions(final_scene_paths)
+        print(f"🎉 DONE: {output_path}")
+        return output_path
+    except Exception as exc:
+        print(f"❌ PIPELINE FAILED: {exc}")
+        return None
+    finally:
         clean_cache()
-    else:
-        print("❌ Failed to generate any scenes.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
