@@ -1,179 +1,125 @@
-# 🎬 AutoShorts AI: The Automated Faceless Video Generator
+# 🎬 AutoShorts AI — Automated Faceless Shorts Generator
 
-![Views](https://komarev.com/ghpvc/?username=SaarD00-AI-Youtube-Shorts-Generator&style=for-the-badge&color=blue)
+AutoShorts AI is a Python pipeline that turns a topic into a vertical short-form video: AI topic/script generation → Edge-TTS narration → Pexels stock footage → FFmpeg editing → final 9:16 MP4.
 
+## ✨ Features
 
-**AutoShorts AI** is a Python pipeline that creates viral-style "Faceless" YouTube Shorts and TikToks from a topic. It handles the production chain: AI topic/script generation, voiceover generation, stock footage sourcing, and FFmpeg editing with transitions and avatar injection.
-
----
-
-## ✨ Key Features
-
-- **🧠 Intelligent Scriptwriting:** Uses **Google Gemini 2.0 Flash** to write engaging, "Edutainment" style scripts (Vox/Kurzgesagt style) with strict storytelling structures (Hook → Context → Mechanism → Twist).
-- **🗣️ Voiceovers:** Generates narration with `edge-tts`.
-- **🎞️ Dual-Visual System:** Automatically searches and downloads **two distinct stock videos** per scene from **Pexels**, creating a dynamic "A/B Split" visual style to maximize viewer retention.
-- **✂️ Advanced FFmpeg Editing:**
-- **Smart Trimming:** Syncs video perfectly to audio duration.
-- **A/B Splitting:** Cuts every scene in half, switching visuals mid-sentence.
-- **Pro Transitions:** Randomly applies `xfade` (fade, slide, wipes) between scenes.
-- **Silence Removal:** Automatically trims dead air from AI voice generation.
-
-- **🤖 Random Avatar Injection:** Automatically inserts a custom "Avatar/Mascot" video into a random middle scene to build channel brand identity.
-- **🪟 Windows Ready:** Includes specific FFmpeg flags (`yuv420p`, `faststart`) to prevent corruption errors (`0x80004005`) on Windows Media Player.
-
----
+- 🧠 **AI scripting:** Groq's OpenAI-compatible API generates an 8–9 scene retention-focused script with two literal visual queries per scene.
+- 🗣️ **Voiceover:** Edge-TTS with configurable voice and automatic duration detection.
+- 🎞️ **Dual visuals:** Pexels portrait stock video A/B switching inside every scene.
+- 🤖 **Avatar branding:** Optional avatar injection into up to two middle scenes.
+- ✂️ **FFmpeg rendering:** 1080×1920 vertical output, H.264/AAC, `yuv420p`, `faststart`, and scene transitions.
+- 🧹 **Safe cleanup:** Temporary audio/video files are removed only from the project's `assets` folders after each run.
+- 🛡️ **Validation:** AI JSON and audio outputs are validated before rendering; failed audio scenes are removed cleanly instead of breaking scene/asset indexing.
 
 ## 📂 Project Structure
 
 ```text
-Automated-YT-Shorts-AI/
-│
-├── assets/                  # Stores all media files
-│   ├── audio_clips/         # Generated voiceovers (.wav)
-│   ├── video_clips/         # Downloaded stock footage (.mp4)
-│   ├── temp/                # Intermediate processing files
-│   ├── final/               # 🏆 The Final Output Video lives here
-│   └── avatar/              # ⚠️ PUT YOUR AVATAR VIDEO HERE
-│       └── Professional_Girl_Animation_Video_Generation.mp4
-│
-├── modules/                 # Core Logic Modules
-│   ├── brain.py             # AI Scriptwriter (Gemini)
-│   ├── audio.py             # Voice generator (edge-tts)
-│   ├── asset_manager.py     # Pexels Downloader (Dual-Visual logic)
-│   └── composer.py          # FFmpeg Video Editor (Stitching & Transitions)
-│
-├── main.py                  # Entry point (Orchestrator)
-└── requirements.txt         # Python dependencies
-
+AI-Youtube-Shorts-Generator/
+├── assets/
+│   ├── audio_clips/     # Generated narration (temporary)
+│   ├── video_clips/     # Pexels downloads (temporary)
+│   ├── temp/            # Intermediate renders (temporary)
+│   ├── final/           # Final video output
+│   └── avatar/          # Optional branding video
+│       └── avatars.mp4
+├── modules/
+│   ├── brain.py         # Groq topic + script generation
+│   ├── audio.py         # Edge-TTS narration
+│   ├── asset_manager.py # Pexels search/download
+│   └── composer.py      # FFmpeg scene rendering/stitching
+├── main.py
+├── .env.example
+└── requirements.txt
 ```
 
----
+## 🛠️ Requirements
 
-## 🛠️ Prerequisites
+- Python 3.10+
+- FFmpeg installed and available on PATH
+- Groq API key
+- Pexels API key
+- Internet access for Groq, Edge-TTS, and Pexels
 
-1. **Python 3.10+** installed.
-2. **FFmpeg** installed and added to your system PATH.
-
-- _Windows:_ `winget install ffmpeg` (or download from [ffmpeg.org](https://ffmpeg.org/download.html)).
-- _Verify:_ Type `ffmpeg -version` in your terminal.
-
-3. **API Keys:**
-
-- **Google Gemini API Key** (Free tier available).
-- **Pexels API Key** (Free).
-- No Ngrok token is required for the default voiceover path. The current pipeline uses `edge-tts`.
-
----
-
-## 🚀 Installation
-
-### 1. Clone the Repository
+Verify FFmpeg with:
 
 ```bash
-git clone https://github.com/yourusername/AutoShorts-AI.git
-cd AutoShorts-AI
-
+ffmpeg -version
 ```
 
-### 2. Install Dependencies
+## 🚀 Setup
+
+```bash
+git clone https://github.com/nguyenxuandat20091985-rgb/AI-Youtube-Shorts-Generator.git
+cd AI-Youtube-Shorts-Generator
+python -m venv .venv
+```
+
+Activate the virtual environment, then install dependencies:
 
 ```bash
 pip install -r requirements.txt
-
 ```
 
-### 3. Environment Setup
-
-Create the required folders and add your avatar:
-
-1. Create folder: `assets/avatar`
-2. Place your avatar video inside and name it: `avatars.mp4`
-
-### 4. Configure API Keys
-
-Copy `.env.example` to `.env` and fill in your key:
+Create your environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-Required:
+On Windows PowerShell, use `Copy-Item .env.example .env` instead.
 
-- `GEMINI_API_KEY` for script generation
-- `PEXELS_API_KEY` for stock video search/download
+Set:
 
-Optional:
+- `GROQ_API_KEY` — required for topic/script generation.
+- `GROQ_MODEL` — optional; defaults to `llama-3.3-70b-versatile`.
+- `PEXELS_API_KEY` — required for stock footage.
+- `EDGE_TTS_VOICE` — optional; defaults to `en-US-AvaNeural`.
 
-- `GEMINI_MODEL` to override the default `gemini-2.0-flash` model
+Optional avatar:
 
----
+```text
+assets/avatar/avatars.mp4
+```
 
-## 🎮 How to Run
+If the avatar file is absent, the pipeline simply renders stock footage.
 
-### Generate Video
-
-Run the main script:
+## 🎮 Run
 
 ```bash
 python main.py
-
 ```
 
-1. Enter a topic (e.g., _"The Mystery of the Pyramids"_).
-2. Wait for the AI to write the script, generate audio, download stock footage, and edit the video.
-3. The final video will be saved in `assets/final/final_short.mp4`.
+The pipeline automatically selects a topic, generates the script, creates narration, downloads footage, renders scenes, stitches transitions, and writes:
 
----
+```text
+assets/final/final_short.mp4
+```
 
-## 🧩 Module Breakdown
+Temporary audio/video/intermediate files are cleaned automatically after the run. The final output is preserved.
 
-### `brain.py` ( The Writer)
+## 🔧 Troubleshooting
 
-- **Input:** Topic string.
-- **Logic:** Prompts Gemini to create an 8-9 scene JSON script. It asks for **two** visual keywords per scene (`visual_1`, `visual_2`) to enable the A/B split effect.
+**`GROQ_API_KEY is not set`**
 
-### `audio.py` (The Voice)
+Copy `.env.example` to `.env` and add a valid Groq key.
 
-- **Input:** Text script.
-- **Logic:** Generates MP3 voice clips with `edge-tts`.
-- **Post-Processing:** Reads durations with `mutagen` so scenes can be synced to audio length.
+**Pexels returns no usable footage**
 
-### `asset_manager.py` (The Librarian)
+Check the Pexels key, network connection, and search terms. The asset manager retries simplified queries and can reuse the available clip when only one side of an A/B pair is found.
 
-- **Input:** Visual keywords.
-- **Logic:** Searches Pexels for **Portrait (9:16)** videos. Downloads pairs of videos for every scene. Handles fallbacks (if Video B is missing, reuse Video A).
+**FFmpeg not found**
 
-### `composer.py` (The Editor)
+Install FFmpeg and make sure `ffmpeg -version` works from the same terminal used to run Python.
 
-- **Input:** Audio files + Video files.
-- **Logic:**
-- **Scene Processing:** Cuts the scene duration in half. Plays Video A for the first half, Video B for the second half.
-- **Avatar Injection:** Identifies a random "middle" scene (not hook/outro) and replaces the stock footage with your Avatar loop.
-- **Stitching:** Merges all scenes using `xfade` transitions (wipes, slides).
-- **Rendering:** Exports as `yuv420p` H.264 MP4 with `faststart` flags for maximum compatibility.
+**Avatar is not injected**
 
----
+Place the file exactly at `assets/avatar/avatars.mp4`. Avatar injection is optional and is limited to middle scenes.
 
-## ⚠️ Troubleshooting
+**Final video playback problems**
 
-**Q: The video is black or corrupt (0x80004005 error).**
-
-- **Fix:** This is usually a Windows codec issue. The updated `composer.py` forces `pix_fmt='yuv420p'`. Try opening the file with VLC Media Player.
-
-**Q: "Avatar file missing" error.**
-
-- **Fix:** Ensure your folder structure is exactly `assets/avatar/avatars.mp4`.
-
-**Q: The audio is silent or fails.**
-
-- **Fix:** Check your internet connection and that `edge-tts` is installed from `requirements.txt`.
-
-**Q: FFmpeg error "Exec format error" or "not found".**
-
-- **Fix:** Ensure FFmpeg is installed and accessible from your command line.
-
----
+The renderer exports H.264 video with `yuv420p` and `faststart` for broad player compatibility.
 
 ## 📜 License
 
-This project is open-source. Feel free to modify and build your own automation empire!
+MIT License.
