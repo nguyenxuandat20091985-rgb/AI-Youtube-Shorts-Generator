@@ -1,70 +1,67 @@
-import os
 import asyncio
+import os
+
 import edge_tts
+from dotenv import load_dotenv
 from mutagen.mp3 import MP3
 
+load_dotenv()
+
+
 class AudioEngine:
-    def __init__(self, voice="en-US-AvaNeural"):
-        self.voice = voice
+    def __init__(self, voice=None):
+        self.voice = voice or os.getenv("EDGE_TTS_VOICE", "en-US-AvaNeural")
         self.output_dir = os.path.join(os.getcwd(), "assets", "audio_clips")
         os.makedirs(self.output_dir, exist_ok=True)
 
     async def generate_audio(self, text, output_filename, retries=3):
-        """
-        Generates MP3 with retry logic to handle connection drops.
-        """
         output_path = os.path.join(self.output_dir, output_filename)
-        
         for attempt in range(retries):
             try:
-                # Rate +10% for engagement
                 communicate = edge_tts.Communicate(text, self.voice, rate="+10%")
                 await communicate.save(output_path)
+                if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+                    raise RuntimeError("Edge-TTS returned an empty audio file.")
                 return output_path
-            
-            except Exception as e:
-                print(f"      ⚠️ Audio Error (Attempt {attempt+1}/{retries}): {e}")
+            except Exception as exc:
+                print(f"      ⚠️ Audio Error (Attempt {attempt + 1}/{retries}): {exc}")
+                if os.path.exists(output_path):
+                    try:
+                        os.remove(output_path)
+                    except OSError:
+                        pass
                 if attempt < retries - 1:
-                    await asyncio.sleep(2) # Wait 2 seconds before retrying
-                else:
-                    print("      ❌ Failed to generate audio after max retries.")
-                    raise e # Re-raise error if all retries fail
+                    await asyncio.sleep(2)
+        raise RuntimeError(f"Failed to generate audio after {retries} attempts.")
 
     def get_audio_duration(self, file_path):
         try:
-            audio = MP3(file_path)
-            return audio.info.length
-        except Exception as e:
-            print(f"❌ Error reading audio length: {e}")
+            duration = float(MP3(file_path).info.length)
+            if duration <= 0:
+                raise ValueError("Audio duration is zero.")
+            return duration
+        except Exception as exc:
+            print(f"❌ Error reading audio length: {exc}")
             return 0.0
 
     async def process_script(self, script_data):
         print(f"🎙️ Starting Audio Generation for {len(script_data)} scenes...")
-        
+        successful_scenes = []
         for scene in script_data:
-            scene_id = scene['id']
-            text = scene['text']
-            filename = f"voice_{scene_id}.mp3"
-            
+            scene_id = scene["id"]
             try:
-                # Generate Audio
-                file_path = await self.generate_audio(text, filename)
-                
-                # Get Duration
+                file_path = await self.generate_audio(scene["text"], f"voice_{scene_id}.mp3")
                 duration = self.get_audio_duration(file_path)
-                
-                # Update Scene Data
-                scene['audio_path'] = file_path
-                scene['duration'] = duration
-                
+                if duration <= 0:
+                    raise RuntimeError("Could not determine a valid audio duration.")
+                scene["audio_path"] = file_path
+                scene["duration"] = duration
+                successful_scenes.append(scene)
                 print(f"   ✅ Scene {scene_id}: {duration:.2f}s generated.")
-                
-                # CRITICAL: Sleep for 1 second to be polite to the API
-                # This prevents the "Connection Timeout" error
-                await asyncio.sleep(1) 
-                
-            except Exception as e:
-                print(f"   ❌ Skipping Scene {scene_id} due to audio error.")
-                continue
-            
-        return script_data
+                await asyncio.sleep(1)
+            except Exception as exc:
+                print(f"   ❌ Scene {scene_id} skipped: {exc}")
+
+        if len(successful_scenes) < 2:
+            raise RuntimeError("Fewer than 2 scenes have usable audio; aborting render.")
+        return successful_scenes
