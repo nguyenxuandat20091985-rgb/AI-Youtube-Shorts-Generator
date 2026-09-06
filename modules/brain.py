@@ -3,9 +3,11 @@ import os
 import re
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from groq import Groq
 
 load_dotenv()
+
+DEFAULT_MODEL = "openai/gpt-oss-20b"
 
 
 def _get_client():
@@ -14,15 +16,29 @@ def _get_client():
         raise RuntimeError(
             "GROQ_API_KEY is not set. Copy .env.example to .env and add your Groq API key."
         )
-    return OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+    return Groq(api_key=api_key)
 
 
 class ContentBrain:
-    """Generate a topic and validated scene plan using Groq's OpenAI-compatible API."""
+    """Generate a topic and validated scene plan using Groq."""
 
     def __init__(self):
         self.client = _get_client()
-        self.model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        self.model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
+
+    def _complete(self, prompt, max_completion_tokens):
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_completion_tokens=max_completion_tokens,
+            reasoning_effort="low",
+            include_reasoning=False,
+        )
+        content = response.choices[0].message.content or ""
+        if not content.strip():
+            raise RuntimeError("The AI returned an empty response.")
+        return content.strip()
 
     def get_trending_topic(self):
         prompt = (
@@ -30,17 +46,15 @@ class ContentBrain:
             "Prefer a surprising science, history, technology, nature, or current-interest fact. "
             "Return ONLY the topic name, with no quotes, bullets, or explanation."
         )
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.8,
-            max_tokens=80,
-        )
-        topic = (response.choices[0].message.content or "").strip().strip('"')
-        if not topic:
-            raise RuntimeError("The AI returned an empty topic.")
+        topic = self._complete(prompt, 512).strip('"')
         print(f"🎯 Selected Topic: {topic}")
         return topic
+
+    @staticmethod
+    def _extract_json_array(raw_text):
+        clean = raw_text.replace("```json", "").replace("```", "").strip()
+        match = re.search(r"\[.*\]", clean, re.DOTALL)
+        return match.group(0) if match else clean
 
     def generate_script(self, topic):
         print(f"📝 Writing script for: {topic}...")
@@ -62,18 +76,8 @@ Rules:
 - Keep visual queries concrete (people, places, objects, actions), not abstract emotions.
 - Do not invent citations, URLs, statistics, or unverifiable claims.
 """
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=2200,
-        )
-        raw_text = (response.choices[0].message.content or "").strip()
-        clean_text = raw_text.replace("```json", "").replace("```", "").strip()
-
-        match = re.search(r"\[.*\]", clean_text, re.DOTALL)
-        if match:
-            clean_text = match.group(0)
+        raw_text = self._complete(prompt, 4096)
+        clean_text = self._extract_json_array(raw_text)
 
         try:
             script_data = json.loads(clean_text)
@@ -89,6 +93,7 @@ Rules:
         normalized = []
         for index, scene in enumerate(script_data, start=1):
             if not isinstance(scene, dict):
+                print(f"❌ Scene {index} is not an object.")
                 return None
             text = str(scene.get("text", "")).strip()
             visual_1 = str(scene.get("visual_1", "")).strip()
@@ -96,13 +101,15 @@ Rules:
             if not text or not visual_1:
                 print(f"❌ Scene {index} is missing text or visual_1.")
                 return None
-            normalized.append({
-                "id": index,
-                "text": text,
-                "visual_1": visual_1,
-                "visual_2": visual_2 or visual_1,
-                "mood": str(scene.get("mood", "intriguing")).strip(),
-            })
+            normalized.append(
+                {
+                    "id": index,
+                    "text": text,
+                    "visual_1": visual_1,
+                    "visual_2": visual_2 or visual_1,
+                    "mood": str(scene.get("mood", "intriguing")).strip() or "intriguing",
+                }
+            )
 
         return normalized
 
