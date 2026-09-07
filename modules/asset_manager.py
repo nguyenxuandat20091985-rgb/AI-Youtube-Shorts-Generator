@@ -1,153 +1,151 @@
 import os
-import requests
 import random
+import time
+
+import requests
 from dotenv import load_dotenv
+
 
 class AssetManager:
     def __init__(self):
-        load_dotenv()
+        load_dotenv(override=True)
         self.api_key = os.getenv("PEXELS_API_KEY")
         if not self.api_key:
-            raise RuntimeError("PEXELS_API_KEY is not set. Create a .env file or set the environment variable before running.")
+            raise RuntimeError(
+                "PEXELS_API_KEY is not set. Create a .env file or set the environment variable before running."
+            )
         self.base_url = "https://api.pexels.com/videos/search"
-        self.headers = {
-            "Authorization": self.api_key
-        }
-        
-        # Ensure download directory exists
+        self.headers = {"Authorization": self.api_key}
         self.assets_dir = os.path.join(os.getcwd(), "assets", "video_clips")
         os.makedirs(self.assets_dir, exist_ok=True)
 
-    def search_video(self, query, duration_min=4):
-        """
-        Searches Pexels for a portrait video matching the query.
-        Returns the download URL or None.
-        """
-        print(f"   🔍 Searching Pexels for: '{query}'...")
-        
-        params = {
-            "query": query,
-            "per_page": 5,        # Fetch top 5 results to pick from
-            "orientation": "portrait",
-            "size": "medium"      # 'medium' is usually HD ready, saves bandwidth
-        }
-        
-        try:
-            response = requests.get(self.base_url, headers=self.headers, params=params, timeout=10)
-            if response.status_code != 200:
-                print(f"      ⚠️ API Error: {response.status_code}")
-                return None
-                
-            data = response.json()
-            
-            if not data.get('videos'):
-                # Retry strategy: Simplify query if complex query fails
-                if " " in query:
-                    simple_query = query.split()[-1] # Try last word (usually the noun)
-                    print(f"      ⚠️ No results. Retrying with '{simple_query}'...")
-                    return self.search_video(simple_query)
-                return None
-            
-            # Filter logic: Prefer videos that aren't too short (at least 4 seconds)
-            valid_videos = [v for v in data['videos'] if v['duration'] >= duration_min]
-            
-            if not valid_videos:
-                valid_videos = data['videos'] # Fallback to whatever exists
-                
-            # Randomize selection
-            selected_video = random.choice(valid_videos)
-            
-            # Get best quality video file link
-            video_files = selected_video['video_files']
-            video_files.sort(key=lambda x: x['width'] * x['height'], reverse=True)
-            
-            download_link = video_files[0]['link']
-            return download_link
+    @staticmethod
+    def _fallback_queries(query):
+        words = [w for w in query.replace(",", " ").split() if len(w) > 2]
+        candidates = []
+        if words:
+            candidates.append(" ".join(words[-3:]))
+            candidates.append(words[-1])
+        return list(dict.fromkeys(candidates))
 
-        except Exception as e:
-            print(f"      ❌ Error searching Pexels: {e}")
-            return None
+    def search_video(self, query, duration_min=4):
+        """Find a usable portrait stock clip, with retry/fallback queries."""
+        query = str(query or "").strip() or "nature"
+        queries = [query] + self._fallback_queries(query)
+
+        for attempt, current_query in enumerate(queries[:3]):
+            print(f"   🔍 Searching Pexels: '{current_query}'...")
+            try:
+                response = requests.get(
+                    self.base_url,
+                    headers=self.headers,
+                    params={
+                        "query": current_query,
+                        "per_page": 8,
+                        "orientation": "portrait",
+                        "size": "medium",
+                    },
+                    timeout=20,
+                )
+                if response.status_code == 429:
+                    print("      ⚠️ Pexels rate limit; waiting before retry...")
+                    time.sleep(2)
+                    continue
+                response.raise_for_status()
+                videos = response.json().get("videos", [])
+                if not videos:
+                    continue
+
+                valid_videos = [v for v in videos if v.get("duration", 0) >= duration_min]
+                selected_video = random.choice(valid_videos or videos)
+                video_files = [
+                    f for f in selected_video.get("video_files", [])
+                    if f.get("link")
+                ]
+                if not video_files:
+                    continue
+
+                # Prefer a practical HD-sized source rather than an unnecessarily huge file.
+                video_files.sort(
+                    key=lambda f: (
+                        abs((f.get("width", 0) or 0) - 1080),
+                        (f.get("width", 0) or 0) * (f.get("height", 0) or 0),
+                    )
+                )
+                return video_files[0]["link"]
+            except requests.RequestException as exc:
+                print(f"      ⚠️ Pexels request failed: {exc}")
+                if attempt < len(queries[:3]) - 1:
+                    time.sleep(1)
+            except (ValueError, KeyError, TypeError) as exc:
+                print(f"      ⚠️ Invalid Pexels response: {exc}")
+
+        print(f"      ❌ No usable video found for '{query}'")
+        return None
 
     def download_video(self, url, filename):
-        """
-        Downloads the video content to a local file.
-        """
+        """Download a video safely and atomically into the cache."""
         save_path = os.path.join(self.assets_dir, filename)
-        
-        # Caching strategy
-        if os.path.exists(save_path):
+        if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
             return save_path
 
+        temp_path = save_path + ".part"
         try:
-            with requests.get(url, stream=True, timeout=15) as r:
-                r.raise_for_status()
-                with open(save_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
+            with requests.get(url, stream=True, timeout=45) as response:
+                response.raise_for_status()
+                with open(temp_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+            if os.path.getsize(temp_path) == 0:
+                raise RuntimeError("downloaded file is empty")
+            os.replace(temp_path, save_path)
             return save_path
-        except Exception as e:
-            print(f"      ❌ Error downloading {filename}: {e}")
+        except Exception as exc:
+            print(f"      ❌ Error downloading {filename}: {exc}")
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
             return None
 
     def get_videos(self, script_data):
-        """
-        NEW LOGIC: Downloads TWO videos per scene (A and B).
-        Returns a list of tuples: [(path_a, path_b), (path_a, path_b), ...]
-        """
+        """Download two clips per scene and self-heal when one search fails."""
         print("🎥 Starting Double-Feature Video Download...")
         video_pairs = []
 
         for scene in script_data:
-            scene_id = scene['id']
-            
-            # 1. Get Search Terms
-            # Fallback to 'keywords' if visual_1/2 don't exist (compatibility mode)
-            query_a = scene.get('visual_1', scene.get('keywords', 'abstract'))
-            query_b = scene.get('visual_2', query_a) # Use A if B is missing
-            
-            # 2. Search & Download Clip A
-            url_a = self.search_video(query_a)
+            scene_id = scene["id"]
+            query_a = scene.get("visual_1") or scene.get("keywords") or "nature"
+            query_b = scene.get("visual_2") or query_a
+
             path_a = None
+            path_b = None
+            url_a = self.search_video(query_a)
             if url_a:
                 path_a = self.download_video(url_a, f"scene_{scene_id}_a.mp4")
-            
-            # 3. Search & Download Clip B
             url_b = self.search_video(query_b)
-            path_b = None
             if url_b:
                 path_b = self.download_video(url_b, f"scene_{scene_id}_b.mp4")
-            
-            # 4. Fallback Logic (Self-Healing)
-            # If B fails, use A twice. If A fails, use B twice.
-            if not path_a and path_b: 
-                path_a = path_b
-                print(f"      ⚠️ Scene {scene_id} Clip A missing. Using Clip B for both.")
-            if not path_b and path_a: 
-                path_b = path_a
-                print(f"      ⚠️ Scene {scene_id} Clip B missing. Using Clip A for both.")
 
-            # 5. Final Check
+            if not path_a and path_b:
+                path_a = path_b
+                print(f"      ⚠️ Scene {scene_id}: using Clip B for both halves.")
+            if not path_b and path_a:
+                path_b = path_a
+                print(f"      ⚠️ Scene {scene_id}: using Clip A for both halves.")
+
             if path_a and path_b:
                 video_pairs.append((path_a, path_b))
                 print(f"   ✅ Scene {scene_id} Ready (A + B).")
             else:
-                print(f"   ❌ Scene {scene_id} Completely Failed (No videos found).")
+                print(f"   ❌ Scene {scene_id} has no usable video assets.")
                 video_pairs.append(None)
 
         return video_pairs
 
-# --- TESTING ---
+
 if __name__ == "__main__":
     manager = AssetManager()
-    
-    # Test with new dual-visual format
-    test_script = [
-        {
-            "id": 1, 
-            "visual_1": "cyberpunk city neon", 
-            "visual_2": "hacker typing computer"
-        }
-    ]
-    
-    results = manager.get_videos(test_script)
-    print("🎥 Assets Downloaded:", results)
+    print(manager.get_videos([{"id": 1, "visual_1": "city", "visual_2": "technology"}]))
