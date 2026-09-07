@@ -4,13 +4,14 @@ AutoShorts AI is a Python pipeline that turns a topic into a vertical short-form
 
 ## ✨ Features
 
-- 🧠 **AI scripting:** Groq's OpenAI-compatible API generates an 8–9 scene retention-focused script with two literal visual queries per scene.
+- 🧠 **AI scripting:** Groq generates an 8–9 scene retention-focused script with two literal visual queries per scene.
 - 🗣️ **Voiceover:** Edge-TTS with configurable voice and automatic duration detection.
 - 🎞️ **Dual visuals:** Pexels portrait stock video A/B switching inside every scene.
 - 🤖 **Avatar branding:** Optional avatar injection into up to two middle scenes.
 - ✂️ **FFmpeg rendering:** 1080×1920 vertical output, H.264/AAC, `yuv420p`, `faststart`, and scene transitions.
-- 🧹 **Safe cleanup:** Temporary audio/video files are removed only from the project's `assets` folders after each run.
-- 🛡️ **Validation:** AI JSON and audio outputs are validated before rendering; failed audio scenes are removed cleanly instead of breaking scene/asset indexing.
+- 🧹 **Safe cleanup:** Temporary audio/video files are removed only from the project's generated `assets` folders after each run.
+- 🛡️ **Validation:** AI JSON, audio outputs, environment variables, and final video files are validated before completion.
+- 🧪 **Automated CI:** GitHub Actions installs FFmpeg, compiles the project, and runs offline smoke tests on every push/PR to `Main`.
 
 ## 📂 Project Structure
 
@@ -28,6 +29,8 @@ AI-Youtube-Shorts-Generator/
 │   ├── audio.py         # Edge-TTS narration
 │   ├── asset_manager.py # Pexels search/download
 │   └── composer.py      # FFmpeg scene rendering/stitching
+├── tests/
+│   └── test_pipeline.py # Offline regression/smoke tests
 ├── main.py
 ├── .env.example
 └── requirements.txt
@@ -72,9 +75,11 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead.
 Set:
 
 - `GROQ_API_KEY` — required for topic/script generation.
-- `GROQ_MODEL` — optional; defaults to `llama-3.3-70b-versatile`.
+- `GROQ_MODEL` — optional; defaults to `openai/gpt-oss-20b`.
 - `PEXELS_API_KEY` — required for stock footage.
 - `EDGE_TTS_VOICE` — optional; defaults to `en-US-AvaNeural`.
+
+**Never commit `.env` or API keys to GitHub.** If a key has been exposed, revoke/rotate it and create a replacement.
 
 Optional avatar:
 
@@ -83,6 +88,20 @@ assets/avatar/avatars.mp4
 ```
 
 If the avatar file is absent, the pipeline simply renders stock footage.
+
+## 🧪 Test locally
+
+Run the offline regression suite without calling Groq or Pexels:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Compile-check all Python modules:
+
+```bash
+python -m compileall -q main.py modules tests
+```
 
 ## 🎮 Run
 
@@ -103,6 +122,10 @@ Temporary audio/video/intermediate files are cleaned automatically after the run
 **`GROQ_API_KEY is not set`**
 
 Copy `.env.example` to `.env` and add a valid Groq key.
+
+**`The AI returned an empty response`**
+
+Check that `GROQ_MODEL` is a model available to the API key. The default is `openai/gpt-oss-20b`.
 
 **Pexels returns no usable footage**
 
