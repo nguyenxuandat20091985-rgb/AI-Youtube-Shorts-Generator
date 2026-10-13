@@ -1,0 +1,103 @@
+name: THAO ANH AI - Daily Shorts Autopilot
+
+on:
+  # 11:30 UTC = 18:30 Vietnam time; target release is the next 19:30 Vietnam slot.
+  schedule:
+    - cron: "30 11 * * *"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload and schedule on YouTube (requires configured OAuth secrets)"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: thao-anh-ai-autopilot
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+      YOUTUBE_EXPECTED_CHANNEL_ID: ${{ secrets.YOUTUBE_EXPECTED_CHANNEL_ID }}
+      PUBLISH_REQUESTED: "${{ github.event_name == 'schedule' || inputs.publish }}"
+    steps:
+      - name: Check configuration without exposing secrets
+        id: check
+        shell: bash
+        run: |
+          ready=true
+          if [[ -z "$GROQ_API_KEY" || -z "$PEXELS_API_KEY" ]]; then
+            echo "Core generation secrets are not configured; skipping this run."
+            ready=false
+          fi
+          if [[ "$PUBLISH_REQUESTED" == "true" ]] && [[ -z "$YOUTUBE_CLIENT_ID" || -z "$YOUTUBE_CLIENT_SECRET" || -z "$YOUTUBE_REFRESH_TOKEN" || -z "$YOUTUBE_EXPECTED_CHANNEL_ID" ]]; then
+            echo "YouTube OAuth or expected channel ID is missing; skipping publish run."
+            ready=false
+          fi
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
+  generate-and-schedule:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL || 'openai/gpt-oss-20b' }}
+      PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      EDGE_TTS_VOICE: ${{ vars.EDGE_TTS_VOICE || 'vi-VN-HoaiMyNeural' }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+      YOUTUBE_EXPECTED_CHANNEL_ID: ${{ secrets.YOUTUBE_EXPECTED_CHANNEL_ID }}
+      AUTO_PUBLISH: "${{ github.event_name == 'schedule' || inputs.publish }}"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Generate, validate, and schedule one Short
+        run: python main.py
+      - name: Save MP4 and metadata as a downloadable artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thao-anh-ai-short-${{ github.run_number }}
+          path: |
+            assets/final/thao_anh_ai_*.mp4
+            assets/final/thao_anh_ai_*.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload production summary
+        if: always()
+        run: |
+          {
+            echo "## THAO ANH AI autopilot"
+            echo "- Run status: ${{ job.status }}"
+            echo "- Scheduled execution: daily at 18:30 Vietnam time"
+            echo "- Target publication: 19:30 Vietnam time (next valid slot)"
+            echo "- Check preceding steps and the artifact list for output."
+          } >> "$GITHUB_STEP_SUMMARY"

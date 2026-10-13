@@ -15,11 +15,15 @@ class TestBrainHelpers(unittest.TestCase):
         from modules.brain import ContentBrain
 
         brain = ContentBrain()
-        payload = "[{\"id\":99,\"text\":\"A\",\"visual_1\":\"city\",\"visual_2\":\"road\",\"mood\":\"hook\"},{\"id\":3,\"text\":\"B\",\"visual_1\":\"car\",\"visual_2\":\"highway\",\"mood\":\"fast\"}]"
+        scenes = [
+            {"id": 99, "text": f"Voice line {i}", "visual_1": f"city scene {i}", "visual_2": f"road scene {i}", "mood": "hook"}
+            for i in range(8)
+        ]
+        payload = __import__("json").dumps(scenes)
         with patch.object(brain, "_complete", return_value=payload):
             result = brain.generate_script("Test topic")
-        self.assertEqual([scene["id"] for scene in result], [1, 2])
-        self.assertEqual(result[1]["visual_2"], "highway")
+        self.assertEqual([scene["id"] for scene in result], list(range(1, 9)))
+        self.assertEqual(result[1]["visual_2"], "road scene 1")
 
 
 class TestAssetManagerHelpers(unittest.TestCase):
@@ -35,12 +39,12 @@ class TestMainValidation(unittest.TestCase):
     def test_environment_validation_requires_keys_and_ffmpeg(self):
         import main
 
-        with patch.dict(os.environ, {}, clear=True), patch("main._shutil.which", return_value=None):
+        with patch.dict(os.environ, {}, clear=True), patch("main.shutil.which", return_value=None):
             with self.assertRaisesRegex(RuntimeError, "GROQ_API_KEY"):
                 main.validate_environment()
 
     @patch.dict(os.environ, {"GROQ_API_KEY": "x", "PEXELS_API_KEY": "y"}, clear=True)
-    @patch("main._shutil.which", return_value="/usr/bin/ffmpeg")
+    @patch("main.shutil.which", return_value="/usr/bin/ffmpeg")
     def test_environment_validation_passes(self, _which):
         import main
         main.validate_environment()
