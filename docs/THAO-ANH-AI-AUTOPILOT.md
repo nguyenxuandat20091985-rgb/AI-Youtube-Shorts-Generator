@@ -1,6 +1,6 @@
 # THAO ANH AI Autopilot Setup
 
-This repository can generate a Short and schedule it on YouTube after credentials are configured. The workflow is kept on a feature branch until reviewed and merged into the default branch.
+This repository's THAO ANH AI autopilot workflow is merged into the default branch (`Main`). It can generate a Short and schedule it on YouTube after the required GitHub Actions secrets are configured.
 
 ## Required GitHub Actions secrets
 
@@ -31,7 +31,7 @@ An OAuth app in testing mode may issue refresh tokens that expire or be limited.
 
 ## Schedule
 
-The workflow starts at 11:30 UTC (18:30 Vietnam time). After rendering, the publisher targets the next 19:30 Vietnam-time slot and advances to the following day if the current slot is less than 15 minutes away. GitHub scheduled workflows run only from the repository's default branch, so this workflow will not run on schedule until merged into `Main`.
+The workflow starts at 11:30 UTC (18:30 Vietnam time). After rendering, the publisher targets the next 19:30 Vietnam-time slot and advances to the following day if the current slot is less than 15 minutes away. GitHub scheduled workflows run from the repository's default branch (`Main`). The workflow is present there, but runs safely skip generation or publishing when required secrets are missing.
 
 ## Safeguards and limitations
 
@@ -40,3 +40,14 @@ The workflow starts at 11:30 UTC (18:30 Vietnam time). After rendering, the publ
 - YouTube API quota, OAuth validity, Pexels availability, Groq limits, Edge-TTS availability, and runner duration can interrupt a run.
 - A video is considered uploaded only when the YouTube API returns a video ID.
 - Before unattended runs, test with a private or unlisted video and verify the correct channel in YouTube Studio.
+
+
+## First-run checklist (Android-friendly)
+
+1. Open [repository Actions secrets](https://github.com/nguyenxuandat20091985-rgb/AI-Youtube-Shorts-Generator/settings/secrets/actions).
+2. Add `GROQ_API_KEY` and `PEXELS_API_KEY` to enable video generation.
+3. Add `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, and `YOUTUBE_EXPECTED_CHANNEL_ID` to enable YouTube scheduling. Choose the exact channel in YouTube Studio first; never guess the channel ID.
+4. Open [Actions](https://github.com/nguyenxuandat20091985-rgb/AI-Youtube-Shorts-Generator/actions/workflows/thao-anh-ai-autopilot.yml) → **THAO ANH AI - Daily Shorts Autopilot** → **Run workflow**. Keep `publish=false` for the first run to inspect the MP4 artifact before enabling uploads.
+5. If the first artifact is valid, run again with `publish=true`. Confirm the returned Short URL and scheduled time in the run log and YouTube Studio.
+
+Do not paste API keys, client secrets, or refresh tokens into chat, source code, commits, or workflow logs. If a first run reports missing configuration, add the missing values through GitHub Settings and rerun.
