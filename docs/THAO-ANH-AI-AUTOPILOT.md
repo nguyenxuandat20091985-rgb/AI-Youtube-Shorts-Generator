@@ -9,6 +9,7 @@ This repository can generate a Short and schedule it on YouTube after credential
 - `YOUTUBE_CLIENT_ID`: OAuth 2.0 client ID for a Google Cloud project.
 - `YOUTUBE_CLIENT_SECRET`: OAuth 2.0 client secret.
 - `YOUTUBE_REFRESH_TOKEN`: refresh token authorized for the intended YouTube channel.
+- `YOUTUBE_EXPECTED_CHANNEL_ID`: exact channel ID allowed to receive uploads; the uploader stops if OAuth resolves to another channel.
 
 Optional repository variables:
 
