@@ -10,7 +10,7 @@ load_dotenv()
 
 class AudioEngine:
     def __init__(self, voice=None):
-        self.voice = voice or os.getenv("EDGE_TTS_VOICE", "en-US-AvaNeural")
+        self.voice = voice or os.getenv("EDGE_TTS_VOICE", "vi-VN-HoaiMyNeural")
         self.output_dir = os.path.join(os.getcwd(), "assets", "audio_clips")
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -18,7 +18,7 @@ class AudioEngine:
         output_path = os.path.join(self.output_dir, output_filename)
         for attempt in range(retries):
             try:
-                communicate = edge_tts.Communicate(text, self.voice, rate="+10%")
+                communicate = edge_tts.Communicate(text, self.voice, rate="+8%")
                 await communicate.save(output_path)
                 if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
                     raise RuntimeError("Edge-TTS returned an empty audio file.")
@@ -45,7 +45,7 @@ class AudioEngine:
             return 0.0
 
     async def process_script(self, script_data):
-        print(f"🎙️ Starting Audio Generation for {len(script_data)} scenes...")
+        print(f"🎙️ Starting Vietnamese audio generation for {len(script_data)} scenes with voice {self.voice}...")
         successful_scenes = []
         for scene in script_data:
             scene_id = scene["id"]
@@ -58,10 +58,8 @@ class AudioEngine:
                 scene["duration"] = duration
                 successful_scenes.append(scene)
                 print(f"   ✅ Scene {scene_id}: {duration:.2f}s generated.")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
             except Exception as exc:
-                print(f"   ❌ Scene {scene_id} skipped: {exc}")
-
-        if len(successful_scenes) < 2:
-            raise RuntimeError("Fewer than 2 scenes have usable audio; aborting render.")
+                print(f"   ❌ Scene {scene_id} failed: {exc}")
+                raise RuntimeError(f"Voice generation failed at scene {scene_id}") from exc
         return successful_scenes
