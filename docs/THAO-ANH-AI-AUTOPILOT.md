@@ -31,7 +31,7 @@ An OAuth app in testing mode may issue refresh tokens that expire or be limited.
 
 ## Schedule
 
-The workflow starts at 11:30 UTC (18:30 Vietnam time) and requests publication 60 minutes later, approximately 19:30 Vietnam time. GitHub scheduled workflows run only from the repository's default branch, so this workflow will not run on schedule until merged into `Main`.
+The workflow starts at 11:30 UTC (18:30 Vietnam time). After rendering, the publisher targets the next 19:30 Vietnam-time slot and advances to the following day if the current slot is less than 15 minutes away. GitHub scheduled workflows run only from the repository's default branch, so this workflow will not run on schedule until merged into `Main`.
 
 ## Safeguards and limitations
 
