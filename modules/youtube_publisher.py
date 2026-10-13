@@ -54,6 +54,15 @@ def upload_short(video_path, metadata, publish_at=None, privacy_status="private"
         "status": status,
     }
     youtube = youtube_client()
+    expected_channel_id = _required_env("YOUTUBE_EXPECTED_CHANNEL_ID")
+    channel_response = youtube.channels().list(part="id,snippet", mine=True, maxResults=5).execute()
+    channel_ids = [item.get("id") for item in channel_response.get("items", [])]
+    if expected_channel_id not in channel_ids:
+        raise RuntimeError(
+            "Authorized YouTube account does not match YOUTUBE_EXPECTED_CHANNEL_ID. "
+            "Upload was stopped to prevent publishing to the wrong channel."
+        )
+    print(f"Verified YouTube channel ID: {expected_channel_id}")
     request = youtube.videos().insert(
         part="snippet,status",
         body=body,
