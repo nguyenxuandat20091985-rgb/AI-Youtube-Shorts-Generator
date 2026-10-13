@@ -77,6 +77,14 @@ def upload_short(video_path, metadata, publish_at=None, privacy_status="private"
         "publish_at": response.get("status", {}).get("publishAt"),
     }
 
-def schedule_time_from_now(minutes=60):
-    """Return an ISO-8601 UTC time sufficiently in the future for scheduled publishing."""
-    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+def schedule_time_for_vietnam(hour=19, minute=30, minimum_lead_minutes=15):
+    """Schedule for the next 19:30 Vietnam slot, advancing a day if too close or already passed."""
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(timezone.utc)
+    local_now = now.astimezone(ZoneInfo("Asia/Ho_Chi_Minh"))
+    candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate <= local_now + timedelta(minutes=minimum_lead_minutes):
+        candidate += timedelta(days=1)
+    return candidate.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
