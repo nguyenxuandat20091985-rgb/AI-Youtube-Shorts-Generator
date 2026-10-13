@@ -67,7 +67,7 @@ class Composer:
                     ffmpeg.input(path_a, stream_loop=-1)
                     .trim(duration=duration_a)
                     .setpts('PTS-STARTPTS')
-                    .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
+                    .filter('scale', 1080, 1920, force_original_aspect_ratio='increase').filter('crop', 1080, 1920)
                     .filter('fps', fps=30, round='up')
                 )
 
