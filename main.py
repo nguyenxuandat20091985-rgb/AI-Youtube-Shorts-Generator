@@ -113,10 +113,9 @@ async def main():
         print(f"📝 Title: {metadata['title']}")
 
         if os.getenv("AUTO_PUBLISH", "false").strip().lower() == "true":
-            from modules.youtube_publisher import schedule_time_from_now, upload_short
+            from modules.youtube_publisher import schedule_time_for_vietnam, upload_short
 
-            ahead = int(os.getenv("SCHEDULE_MINUTES_AHEAD", "60"))
-            publish_at = schedule_time_from_now(max(ahead, 15))
+            publish_at = schedule_time_for_vietnam(hour=19, minute=30)
             result = upload_short(unique_path, metadata, publish_at=publish_at, privacy_status="private")
             result["topic"] = topic
             result["title"] = metadata["title"]
